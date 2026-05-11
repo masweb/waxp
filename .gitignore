@@ -1,3 +1,4 @@
 echo
 vuebo
 langchain/node_modules
+langchain/.env

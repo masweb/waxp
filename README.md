@@ -1,446 +1,512 @@
 # WAXP
 
-CMS visual con page builder drag & drop. Construye sitios web completos dibujando bloques sobre un CSS Grid, con soporte multi-idioma, soporte responsive completo, temas dark/light, tipografía responsiva y renderizado estático.
+Visual CMS with drag & drop page builder. Build complete websites by drawing blocks on a CSS Grid, with multi-language support, full responsive support, dark/light themes, responsive typography, and static rendering.
 
-## Arquitectura
+## Architecture
 
-| Capa | Stack | Directorio |
-|------|-------|------------|
+| Layer | Stack | Directory |
+|-------|-------|-----------|
 | Frontend | Vue 3 + TypeScript + Vite Plus | `vuebo/` |
 | Backend Admin | Go + Echo v5 + PostgreSQL | `echo/` (cmd/admin) |
 | Backend Render | Go + Echo v5 + PostgreSQL | `echo/` (cmd/render) |
+| AI Agent | LangChain + LangGraph + DeepSeek | `langchain/` |
 
 ```
 waxp/
 ├── vuebo/                  # Frontend — Vue 3 SPA
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── editor/     # Page builder (bloques, secciones, overlay, settings)
-│   │   │   └── manager/    # Gestión de sitios
-│   │   ├── composables/    # Lógica reutilizable (drag, grid, bloques, tema...)
-│   │   ├── stores/         # Estado global con Pinia
-│   │   ├── types/          # Tipos TypeScript
-│   │   ├── views/          # Vistas de la app
-│   │   ├── router/         # Vue Router con rutas dinámicas
-│   │   ├── i18n/           # Internacionalización + datos de referencia
+│   │   │   ├── editor/     # Page builder (blocks, sections, overlay, settings)
+│   │   │   └── manager/    # Site management
+│   │   ├── composables/    # Reusable logic (drag, grid, blocks, theme...)
+│   │   ├── stores/         # Global state with Pinia
+│   │   ├── types/          # TypeScript types
+│   │   ├── views/          # App views
+│   │   ├── router/         # Vue Router with dynamic routes
+│   │   ├── i18n/           # Internationalization + reference data
 │   │   ├── db/             # IndexedDB (Dexie)
-│   │   ├── css/            # Estilos globales
-│   │   └── assets/         # Recursos estáticos
-│   └── docs/               # Documentación del frontend
+│   │   ├── css/            # Global styles
+│   │   └── assets/         # Static assets
+│   └── docs/               # Frontend documentation
 ├── echo/                   # Backend
 │   ├── cmd/
-│   │   ├── admin/          # Entry point — API REST backoffice
-│   │   └── render/         # Entry point — Servidor de páginas públicas
+│   │   ├── admin/          # Entry point — REST API backoffice
+│   │   └── render/         # Entry point — Public page server
 │   ├── internal/
-│   │   ├── admin/          # Setup servidor admin (rutas protegidas con JWT)
-│   │   ├── renderer/       # Setup servidor render (solo lectura, sin auth)
+│   │   ├── admin/          # Admin server setup (JWT-protected routes)
+│   │   ├── renderer/       # Render server setup (read-only, no auth)
 │   │   ├── handler/        # HTTP handlers (auth, sites, pages, media, blocks...)
-│   │   ├── render/         # Motor de renderizado HTML/CSS estático
-│   │   ├── db/             # Código generado por sqlc
-│   │   ├── filter/         # Sistema de filtros genérico para queries
-│   │   ├── middleware/      # Auth JWT, CORS
-│   │   └── config/         # Configuración desde env (AdminConfig / RenderConfig)
+│   │   ├── render/         # Static HTML/CSS rendering engine
+│   │   ├── db/             # sqlc generated code
+│   │   ├── filter/         # Generic filter system for queries
+│   │   ├── middleware/      # JWT auth, CORS
+│   │   └── config/         # Config from env (AdminConfig / RenderConfig)
 │   ├── db/
-│   │   ├── migrations/     # Migraciones SQL
-│   │   └── queries/        # Queries sqlc
-│   └── project/            # Documentación del backend
+│   │   ├── migrations/     # SQL migrations
+│   │   └── queries/        # sqlc queries
+│   └── project/            # Backend documentation
+├── langchain/              # AI Agent — LangChain + LangGraph
+│   └── src/
+│       ├── server.ts       # Express server + SSE streaming
+│       ├── graph.ts        # LangGraph StateGraph (ReAct agent)
+│       ├── tools.ts        # LangChain tools (site CRUD)
+│       └── api.ts          # Authenticated API client for CMS backend
 └── README.md
 ```
 
 ---
 
+## AI Agent (LangChain)
+
+A conversational agent built with **LangChain + LangGraph + DeepSeek** that manages CMS sites via natural language. Runs as a standalone Express server with SSE streaming.
+
+### Architecture
+
+- **LLM**: `ChatDeepSeek` (`deepseek-chat`) bound with LangChain tools
+- **Agent pattern**: LangGraph `StateGraph` with ReAct loop — `llmCall` → conditional → `toolNode` → `llmCall` → … → `END`
+- **Streaming**: Server-Sent Events (SSE) with token-level streaming, tool call events, and tool results
+- **Auth**: Dedicated agent account with JWT auto-renewal (1-hour cache)
+
+### Available tools
+
+| Tool | Description |
+|------|-------------|
+| `search_sites` | Search sites by name or domain (internal use — resolves names to IDs) |
+| `create_site` | Create site with name, domain, and locales (ISO 639-1). Generates header, footer, and default pages |
+| `update_site` | Update site name, domain, or options by ID |
+| `delete_site` | Delete site by ID (cascade: locales, pages, blocks) |
+
+### System behavior
+
+- Asks for all required fields before creating a site (name, domain, locales)
+- Automatically resolves names/domains to IDs via `search_sites` — never asks the user for an ID
+- Responds in natural language, never exposes raw JSON or technical details
+
+### Running
+
+```bash
+cd langchain
+cp .env.example .env          # Configure DEEPSEEK_API_KEY, API_BASE_URL, API_AUTH_EMAIL, API_AUTH_PASSWORD
+pnpm install
+pnpm dev                      # Agent server on http://localhost:3001
+```
+
+**Environment variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEEPSEEK_API_KEY` | DeepSeek API key | — (required) |
+| `API_BASE_URL` | CMS backend URL | `http://localhost:8080` |
+| `API_AUTH_EMAIL` | Agent auth email | — (required) |
+| `API_AUTH_PASSWORD` | Agent auth password | — (required) |
+| `PORT` | Agent server port | `3001` |
+
+---
+
 ## Page Builder
 
-El editor visual permite construir páginas arrastrando bloques sobre un grid responsivo con 3 breakpoints independientes.
+The visual editor lets you build pages by dragging blocks onto a responsive grid with 3 independent breakpoints.
 
-### Grid responsivo
+### Responsive Grid
 
-| Viewport | Columnas | Filas por defecto | Gap |
-|----------|----------|-------------------|-----|
-| Desktop  | 24       | 12                | 12px|
-| Tablet   | 20       | 12                | 8px |
-| Mobile   | 8        | 12                | 8px |
+| Viewport | Columns | Default Rows | Gap |
+|----------|---------|--------------|-----|
+| Desktop  | 24      | 12           | 12px|
+| Tablet   | 20      | 12           | 8px |
+| Mobile   | 8       | 12           | 8px |
 
-Cada bloque almacena coordenadas independientes para los 3 breakpoints (`d`, `m`, `t`), permitiendo layouts completamente diferentes por dispositivo. El viewport se alterna en tiempo real desde la toolbar del editor.
+Each block stores independent coordinates for the 3 breakpoints (`d`, `m`, `t`), allowing completely different layouts per device. The viewport can be switched in real time from the editor toolbar.
 
-### Sistema de bloques
+### Block System
 
-Los bloques son unidades de contenido que se posicionan como hijos directos del CSS Grid mediante `grid-column` y `grid-row` con span. Usan `contain: size` + `overflow: visible` + `min-width/height: 0` para que el grid controle el tamaño independientemente del contenido.
+Blocks are content units positioned as direct children of the CSS Grid via `grid-column` and `grid-row` with span. They use `contain: size` + `overflow: visible` + `min-width/height: 0` so the grid controls sizing independently of content.
 
-**Tipos de bloque disponibles:**
+**Available block types:**
 
-| Tipo | Descripción |
+| Type | Description |
 |------|-------------|
-| `Text` | Contenido multilenguaje con editor TipTap (bold, italic, headings, lists, tables, code, links...) |
-| `Image` | Imagen responsiva con URLs por dispositivo, focal point, zoom y fit modes |
-| `Button` | Botón con estilos completos: colores light/dark para bg, texto, bordes, hover, active, focus |
-| `Icon` | Icono vectorial (Tabler Icons) con enlace, color y tamaño configurable |
-| `Menu` | Menú de navegación jerárquico con items recursivos, fuentes por nivel y colores de estado |
-| `Space` | Espaciador con divisor configurable (color, grosor, estilo de línea) |
-| `DarkMode` | Toggle de tema dark/light con detección de preferencia del sistema |
-| `LanguageSwitcher` | Selector de idioma que cambia el locale activo |
+| `Text` | Multilingual content with TipTap editor (bold, italic, headings, lists, tables, code, links...) |
+| `Image` | Responsive image with per-device URLs, focal point, zoom, and fit modes |
+| `Button` | Button with full styling: light/dark colors for bg, text, borders, hover, active, focus |
+| `Icon` | Vector icon (Tabler Icons) with link, color, and configurable size |
+| `Menu` | Hierarchical navigation menu with recursive items, per-level fonts, and state colors |
+| `Space` | Spacer with configurable divider (color, thickness, line style) |
+| `DarkMode` | Dark/light theme toggle with system preference detection |
+| `LanguageSwitcher` | Language selector that changes the active locale |
 
-### Draw (dibujar bloques)
+### Draw (drawing blocks)
 
-Dibujar bloques nuevos directamente sobre el grid arrastrando el cursor:
+Draw new blocks directly on the grid by dragging the cursor:
 
-- **interact.js** captura el drag sobre la sección
-- Conversión píxel → coordenadas de grid en tiempo real
-- **Overlay visual** (`DrawingOverlay.vue`) muestra la selección semi-transparente
-- Detección de colisiones: no permite dibujar sobre bloques existentes
-- **Push-down** automático: si el nuevo bloque solapa otro, empuja el existente hacia abajo
-- **Expansión de filas**: el grid crece automáticamente si el dibujo excede las filas actuales
-- Throttle con `requestAnimationFrame` (máx. 1 actualización por frame, 60fps)
+- **interact.js** captures the drag over the section
+- Pixel → grid coordinate conversion in real time
+- **Visual overlay** (`DrawingOverlay.vue`) shows the semi-transparent selection
+- Collision detection: prevents drawing over existing blocks
+- **Auto push-down**: if the new block overlaps another, it pushes the existing one down
+- **Row expansion**: the grid grows automatically if the drawing exceeds current rows
+- Throttled with `requestAnimationFrame` (max 1 update per frame, 60fps)
 
-### Move (mover bloques)
+### Move (moving blocks)
 
-Mover bloques arrastrando desde el handle `.blockui.move`:
+Move blocks by dragging from the `.blockui.move` handle:
 
-- `transform: translate3d()` para feedback visual (GPU-acelerado)
-- **cellHalf**: snapping simétrico desplazando el punto de detección al centro de la primera celda
-- Shadow overlay muestra la posición destino mientras el bloque se mueve
-- Resolución de colisiones y auto-posicionamiento en los otros breakpoints
-- `trimRows` elimina filas vacías tras mover
+- `transform: translate3d()` for visual feedback (GPU-accelerated)
+- **cellHalf**: symmetric snapping by offsetting the detection point to the center of the first cell
+- Shadow overlay shows the target position while the block moves
+- Collision resolution and auto-positioning on other breakpoints
+- `trimRows` removes empty rows after moving
 
-### Resize (redimensionar bloques)
+### Resize (resizing blocks)
 
-Redimensionar arrastrando los bordes derecho e inferior via `.blockui.resize`:
+Resize by dragging the right and bottom edges via `.blockui.resize`:
 
-- **Live grid snapping**: actualiza las coordenadas reactivas en vivo — el bloque se reposiciona en el grid real en cada frame, sin usar `transform: scale()`
-- Usa `event.rect` de interact.js (no `getBoundingClientRect()`) para dimensiones precisas
-- cellHalf para snapping simétrico de tamaño
-- Restricción mínima de 1x1 celda
+- **Live grid snapping**: updates reactive coordinates live — the block repositions on the real grid each frame, without using `transform: scale()`
+- Uses interact.js `event.rect` (not `getBoundingClientRect()`) for accurate dimensions
+- cellHalf for symmetric size snapping
+- Minimum constraint of 1×1 cell
 
-### Estructura de datos del bloque
+### Block Data Structure
 
 ```typescript
 interface Block {
   id: number
   type: string
-  locales?: Record<string, string>      // Contenido traducible por locale
+  locales?: Record<string, string>      // Translatable content per locale
   d: BlockCoords                        // Desktop
   m: BlockCoords                        // Mobile
   t: BlockCoords                        // Tablet
-  style: BlockStyle                     // Fondo, bordes, padding, margin
-  color?: null | string                 // Color de texto (light)
-  darkColor?: null | string             // Color de texto (dark)
-  fontSize?: null | number              // Tamaño de fuente
-  lineHeight?: null | number            // Altura de línea
-  divider?: SideBorder                  // Línea divisoria (Space)
-  image?: BlockImage                    // URLs de imagen por breakpoint
-  link?: BlockLink                      // Capa de enlace (internal/external/anchor)
-  button?: BlockButton                  // Estilos completos de botón
-  icon?: BlockIcon                      // Nombre y strokeWidth del icono
-  menu?: MenuItem[]                     // Items de menú (resuelto por locale)
-  menuColors?: MenuColors               // Colores normal/hover/active × light/dark
-  menuFont?: Font                       // Fuente nivel 1 del menú
-  menuSubFont?: Font                    // Fuente subniveles del menú
-  isMobileMenu?: boolean                // Marcado como menú móvil
+  style: BlockStyle                     // Background, borders, padding, margin
+  color?: null | string                 // Text color (light)
+  darkColor?: null | string             // Text color (dark)
+  fontSize?: null | number              // Font size
+  lineHeight?: null | number            // Line height
+  divider?: SideBorder                  // Divider line (Space)
+  image?: BlockImage                    // Image URLs per breakpoint
+  link?: BlockLink                      // Link layer (internal/external/anchor)
+  button?: BlockButton                  // Full button styles
+  icon?: BlockIcon                      // Icon name and strokeWidth
+  menu?: MenuItem[]                     // Menu items (resolved by locale)
+  menuColors?: MenuColors               // Normal/hover/active colors × light/dark
+  menuFont?: Font                       // Menu level 1 font
+  menuSubFont?: Font                    // Menu sub-level font
+  isMobileMenu?: boolean                // Marked as mobile menu
 }
 
 interface BlockCoords {
-  x: number    // Columna inicial (1-indexed)
-  y: number    // Fila inicial (1-indexed)
-  w: number    // Span de columnas
-  h: number    // Span de filas
+  x: number    // Start column (1-indexed)
+  y: number    // Start row (1-indexed)
+  w: number    // Column span
+  h: number    // Row span
 }
 ```
 
-### Panel de opciones
+### Options Panel
 
-Cada tipo de bloque tiene su panel de settings específico (`ButtonSettings`, `TextSettings`, `ImageSettings`, etc.) que se carga dinámicamente según el bloque seleccionado. Incluye:
+Each block type has its own settings panel (`ButtonSettings`, `TextSettings`, `ImageSettings`, etc.) loaded dynamically based on the selected block. Includes:
 
-- **Background**: color, imagen, gradiente con soporte light/dark, focal point, zoom
-- **Bordes**: radius por esquina, bordes por lado (color, grosor, estilo)
-- **Padding / Margin**: por lado
-- **Fuente**: selector de Google Fonts con pesos y cursiva
-- **Colores**: pickers independientes para light y dark
-- **Enlace**: interno, externo o ancla
-- **Ocultar en**: ocultar el bloque en breakpoints específicos
-- **Campos reutilizables**: `ColorPicker`, `NumberRange`, `SectionRange`, `MediaPicker`, `FocalPointPicker`, `FontFamilyField`, `SidesField`, `TextField`
+- **Background**: color, image, gradient with light/dark support, focal point, zoom
+- **Borders**: per-corner radius, per-side borders (color, thickness, style)
+- **Padding / Margin**: per side
+- **Font**: Google Fonts selector with weights and italic
+- **Colors**: independent pickers for light and dark
+- **Link**: internal, external, or anchor
+- **Hide on**: hide the block on specific breakpoints
+- **Reusable fields**: `ColorPicker`, `NumberRange`, `SectionRange`, `MediaPicker`, `FocalPointPicker`, `FontFamilyField`, `SidesField`, `TextField`
 
 ---
 
-## Internacionalización (i18n)
+## Internationalization (i18n)
 
-### Sistema de locales del site
+### Site Locales System
 
-Cada site puede tener múltiples idiomas (locales). El contenido se almacena como un mapa anidado por locale en la base de datos y se resuelve al locale solicitado en la respuesta de la API.
+Each site can have multiple languages (locales). Content is stored as a nested map per locale in the database and resolved to the requested locale in the API response.
 
-**Almacenamiento en BD:**
+**Database storage:**
 ```json
 { "locales": { "text": { "es": "<p>Hola</p>", "en": "<p>Hello</p>" } } }
 ```
 
-**Respuesta API (`?locale=es`):**
+**API response (`?locale=es`):**
 ```json
 { "locales": { "text": "<p>Hola</p>" } }
 ```
 
-Los campos compartidos (estilos, colores, coordenadas) no se localizan — son iguales para todos los idiomas.
+Shared fields (styles, colors, coordinates) are not localized — they are the same across all languages.
 
-### UI del editor
+### Editor UI
 
-El frontend usa **vue-i18n** con mensajes en `es` e `en` para la interfaz del editor. Se auto-importa desde `src/i18n/locales/`.
+The frontend uses **vue-i18n** with messages in `es` and `en` for the editor interface. Auto-imported from `src/i18n/locales/`.
 
-### Datos de referencia
+### Reference Data
 
-Módulo independiente en `src/i18n/reference/` con nombres de idiomas (ISO 639-1, 184 entradas) y países (ISO 3166, ~249 entradas) traducidos a `es` e `en`. El composable `useReferenceData()` reacciona al locale actual de la app.
-
----
-
-## Sistema de temas Dark/Light
-
-- 3 modos: `light`, `dark`, `auto` (sigue la preferencia del sistema)
-- Persistencia en `localStorage`
-- Aplicación via `data-coreui-theme` en `<html>`
-- Detección de sistema con `matchMedia('(prefers-color-scheme: dark)')`
-- Evento custom `coreui-theme-change` para reaccionar a cambios
-- Composable `useTheme()` con `isDark`, `isLight`, `isAuto`, `setTheme()`, `toggleTheme()`
-
-Todos los bloques y secciones soportan colores independientes para light y dark (texto, fondos, bordes, botones, menús).
+Independent module in `src/i18n/reference/` with language names (ISO 639-1, 184 entries) and country names (ISO 3166, ~249 entries) translated to `es` and `en`. The `useReferenceData()` composable reacts to the current app locale.
 
 ---
 
-## Tipografía responsiva
+## Dark/Light Theme System
 
-El sistema de fuentes calcula tamaños fluidos que se adaptan al ancho del viewport:
+- 3 modes: `light`, `dark`, `auto` (follows system preference)
+- Persisted in `localStorage`
+- Applied via `data-coreui-theme` on `<html>`
+- System detection with `matchMedia('(prefers-color-scheme: dark)')`
+- Custom event `coreui-theme-change` to react to changes
+- `useTheme()` composable with `isDark`, `isLight`, `isAuto`, `setTheme()`, `toggleTheme()`
 
-- **`calcFluidFont`**: fórmula que interpola entre un mínimo y máximo según el ancho del target
-- Zoom configurable por breakpoint (mobile, tablet, desktop) en las opciones del site
-- Cada bloque puede heredar del site o definir su propio `fontSize` y `lineHeight`
-- Headers (H1–H6) con tamaño, fuente, peso y altura de línea configurables globalmente
-- Carga dinámica de **Google Fonts** con pesos y variantes italic seleccionables
+All blocks and sections support independent colors for light and dark (text, backgrounds, borders, buttons, menus).
 
 ---
 
-## API REST
+## Responsive Typography
 
-Autenticación JWT en todas las rutas (excepto health check y serve de media).
+The font system calculates fluid sizes that adapt to the viewport width:
+
+- **`calcFluidFont`**: formula that interpolates between a minimum and maximum based on the target width
+- Configurable zoom per breakpoint (mobile, tablet, desktop) in site options
+- Each block can inherit from the site or define its own `fontSize` and `lineHeight`
+- Headers (H1–H6) with globally configurable size, font, weight, and line height
+- Dynamic loading of **Google Fonts** with selectable weights and italic variants
+
+---
+
+## REST API
+
+JWT authentication on all routes (except health check and media serving).
 
 ### Auth
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/auth/register` | Registro de usuario |
-| `POST` | `/api/auth/login` | Login (devuelve JWT) |
-| `GET` | `/api/me` | Usuario actual |
+| `POST` | `/api/auth/register` | User registration |
+| `POST` | `/api/auth/login` | Login (returns JWT) |
+| `GET` | `/api/me` | Current user |
 
 ### Sites
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/sites` | Listar sitios (paginado, filtrable) |
-| `POST` | `/api/sites` | Crear sitio con páginas por defecto |
-| `GET` | `/api/sites/:id` | Obtener sitio (opciones resueltas al locale) |
-| `PUT` | `/api/sites/:id` | Actualizar sitio (merge por locale) |
-| `PUT` | `/api/sites/:id/live` | Publicar sitio (regenera páginas renderizadas) |
-| `DELETE` | `/api/sites/:id` | Eliminar sitio |
-| `POST` | `/api/sites/:id/locales` | Añadir idioma al sitio |
-| `DELETE` | `/api/sites/:id/locales/:code` | Eliminar idioma (cascade) |
+| `GET` | `/api/sites` | List sites (paginated, filterable) |
+| `POST` | `/api/sites` | Create site with default pages |
+| `GET` | `/api/sites/:id` | Get site (options resolved to locale) |
+| `PUT` | `/api/sites/:id` | Update site (merge by locale) |
+| `PUT` | `/api/sites/:id/live` | Publish site (regenerates rendered pages) |
+| `DELETE` | `/api/sites/:id` | Delete site |
+| `POST` | `/api/sites/:id/locales` | Add language to site |
+| `DELETE` | `/api/sites/:id/locales/:code` | Remove language (cascade) |
 
 ### Pages
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/sites/:id/pages` | Listar páginas (paginado, filtrable) |
-| `POST` | `/api/sites/:id/pages` | Crear página o post |
-| `GET` | `/api/sites/:id/pages/:pageId` | Obtener página (layout resuelto al locale) |
-| `PUT` | `/api/sites/:id/pages/:pageId` | Actualizar página (merge por locale) |
-| `DELETE` | `/api/sites/:id/pages/:pageId` | Eliminar página |
-| `GET` | `/api/sites/:id/routes` | Todas las rutas (para vue-router) |
-| `POST` | `/api/sites/:id/sections/next-id` | Siguiente ID de sección |
-| `POST` | `/api/sites/:id/blocks/next-id` | Siguiente ID de bloque |
+| `GET` | `/api/sites/:id/pages` | List pages (paginated, filterable) |
+| `POST` | `/api/sites/:id/pages` | Create page or post |
+| `GET` | `/api/sites/:id/pages/:pageId` | Get page (layout resolved to locale) |
+| `PUT` | `/api/sites/:id/pages/:pageId` | Update page (merge by locale) |
+| `DELETE` | `/api/sites/:id/pages/:pageId` | Delete page |
+| `GET` | `/api/sites/:id/routes` | All routes (for vue-router) |
+| `POST` | `/api/sites/:id/sections/next-id` | Next section ID |
+| `POST` | `/api/sites/:id/blocks/next-id` | Next block ID |
 
 ### Media
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/media` | Subir imagen (genera thumbnail WebP 150×150) |
-| `GET` | `/api/media` | Listar media (paginado, filtrable) |
-| `GET` | `/api/media/:id` | Obtener metadata |
-| `DELETE` | `/api/media/:id` | Eliminar (archivo + thumbnail) |
-| `GET` | `/media/:name` | Servir archivo (público, sin auth) |
+| `POST` | `/api/media` | Upload image (generates 150×150 WebP thumbnail) |
+| `GET` | `/api/media` | List media (paginated, filterable) |
+| `GET` | `/api/media/:id` | Get metadata |
+| `DELETE` | `/api/media/:id` | Delete (file + thumbnail) |
+| `GET` | `/media/:name` | Serve file (public, no auth) |
 
-### Paginación
+### Pagination
 
-Todos los listados usan **cursor-based pagination** con soporte de filtros:
+All list endpoints use **cursor-based pagination** with filter support:
 
-- `cursor` — ID del último elemento de la página anterior
-- `limit` — Elementos por página (máx. 100, opcional = todos)
-- `filter[columna]` — Filtros con operadores: `=`, `_neq`, `_like` (ILIKE), `_gt`, `_gte`, `_lt`, `_lte`, `_in`, `_isnull`
-- Respuesta: `{ data, next_cursor, total, has_more }`
-
----
-
-## Motor de renderizado
-
-El backend genera HTML+CSS estático a partir del layout almacenado y lo cachea en la tabla `page_renders`.
-
-**Flujo:**
-1. Al publicar un sitio (`PUT /sites/:id/live`), se regeneran todas las páginas
-2. El motor recorre secciones y bloques, generando CSS responsivo y HTML semántico
-3. Cada tipo de bloque tiene su función de renderizado dedicada (`writeTextBlock`, `writeImageBlock`, `writeButtonBlock`, etc.)
-4. El resultado se sirve como HTML estático desde `ServePage` sin pasar por Vue
-
-**Tipos de bloque renderizados:**
-- Text → HTML del editor TipTap
-- Image → `<img>` responsiva con srcset por breakpoint
-- Button → `<a>` estilizado con hover/active/focus
-- Icon → SVG embebido
-- Space → `<div>` con border-top
-- DarkMode → `<button>` con toggle JS inline
-- LanguageSwitcher → `<select>` con opciones por locale
-- Menu → `<nav><ul>` jerárquico con estados hover/active
-
-**CSS generado:**
-- Sistema de grid por breakpoint con media queries
-- Variables CSS para colores light/dark
-- Fuentes fluidas con clamp()
-- Estilos de headers (H1–H6) según configuración del site
-- Backgrounds, bordes y espaciados por bloque y sección
+- `cursor` — ID of the last item from the previous page
+- `limit` — Items per page (max 100, optional = all)
+- `filter[column]` — Filters with operators: `=`, `_neq`, `_like` (ILIKE), `_gt`, `_gte`, `_lt`, `_lte`, `_in`, `_isnull`
+- Response: `{ data, next_cursor, total, has_more }`
 
 ---
 
-## Secciones
+## Rendering Engine
 
-Las páginas se componen de secciones. Cada sección es un CSS Grid independiente con su propia configuración de columnas, filas, gap, fondo, bordes, padding y margin.
+The backend generates static HTML+CSS from the stored layout and caches it in the `page_renders` table.
 
-**Site header & footer:** Secciones especiales definidas en `site.options.header` y `site.options.footer`, compartidas entre todas las páginas del sitio.
+**Flow:**
+1. When publishing a site (`PUT /sites/:id/live`), all pages are regenerated
+2. The engine iterates over sections and blocks, generating responsive CSS and semantic HTML
+3. Each block type has its own dedicated render function (`writeTextBlock`, `writeImageBlock`, `writeButtonBlock`, etc.)
+4. The result is served as static HTML from `ServePage` without going through Vue
 
-**Opciones de sección:**
-- Ancho máximo y fullWidth
-- Ocultar en breakpoints específicos
-- Background: color, imagen, gradiente (con soporte light/dark)
-- Padding y margin por lado
-- Filas dinámicas: crecen automáticamente al insertar bloques y se reducen con `trimRows`
+**Rendered block types:**
+- Text → TipTap editor HTML
+- Image → responsive `<img>` with srcset per breakpoint
+- Button → styled `<a>` with hover/active/focus
+- Icon → embedded SVG
+- Space → `<div>` with border-top
+- DarkMode → `<button>` with inline JS toggle
+- LanguageSwitcher → `<select>` with per-locale options
+- Menu → hierarchical `<nav><ul>` with hover/active states
+
+**Generated CSS:**
+- Grid system per breakpoint with media queries
+- CSS variables for light/dark colors
+- Fluid fonts with clamp()
+- Header styles (H1–H6) per site configuration
+- Backgrounds, borders, and spacing per block and section
 
 ---
 
-## Gestión de rutas
+## Sections
 
-El frontend genera rutas dinámicas en vue-router a partir de los slugs de cada página, organizadas por locale:
+Pages are composed of sections. Each section is an independent CSS Grid with its own column, row, gap, background, border, padding, and margin configuration.
+
+**Site header & footer:** Special sections defined in `site.options.header` and `site.options.footer`, shared across all pages in the site.
+
+**Section options:**
+- Maximum width and fullWidth
+- Hide on specific breakpoints
+- Background: color, image, gradient (with light/dark support)
+- Padding and margin per side
+- Dynamic rows: grow automatically when inserting blocks and shrink with `trimRows`
+
+---
+
+## Route Management
+
+The frontend generates dynamic routes in vue-router from each page's slugs, organized by locale:
 
 ```
 GET /api/sites/:id/routes → { "es": [{ "path": "/", "page_id": 1 }], "en": [{ "path": "/en", "page_id": 1 }] }
 ```
 
-Las rutas se cargan al abrir un sitio y se inyectan dinámicamente en el router. Cada página tiene slugs independientes por idioma, permitiendo URLs como `/nosotros` en ES y `/about` en EN.
+Routes are loaded when opening a site and injected dynamically into the router. Each page has independent slugs per language, allowing URLs like `/nosotros` in ES and `/about` in EN.
 
 ---
 
-## Stack tecnológico
+## Technology Stack
 
 ### Frontend (`vuebo/`)
 
-| Tecnología | Uso |
-|------------|-----|
-| Vue 3 | Framework UI con `<script setup>` |
-| TypeScript | Tipado estático |
-| Vite Plus | Build tool y dev server |
-| Pinia | Estado global (10 stores) |
-| Vue Router 5 | Rutas dinámicas |
-| vue-i18n | Internacionalización de la UI |
-| CoreUI 5 | Framework CSS + componentes |
-| TipTap | Editor de texto enriquecido |
+| Technology | Usage |
+|------------|-------|
+| Vue 3 | UI framework with `<script setup>` |
+| TypeScript | Static typing |
+| Vite Plus | Build tool and dev server |
+| Pinia | Global state (10 stores) |
+| Vue Router 5 | Dynamic routes |
+| vue-i18n | UI internationalization |
+| CoreUI 5 | CSS framework + components |
+| TipTap | Rich text editor |
 | interact.js | Drag & drop, resize |
-| VeeValidate | Validación de formularios |
-| Dexie | IndexedDB (fuentes offline) |
-| ofetch | Cliente HTTP |
-| Tabler Icons | Iconos SVG |
-| Sass | Preprocesador CSS |
-| unplugin-auto-import | Auto-import de composables, stores y tipos |
-| unplugin-vue-components | Auto-import de componentes |
+| VeeValidate | Form validation |
+| Dexie | IndexedDB (offline fonts) |
+| ofetch | HTTP client |
+| Tabler Icons | SVG icons |
+| Sass | CSS preprocessor |
+| unplugin-auto-import | Auto-import composables, stores, and types |
+| unplugin-vue-components | Auto-import components |
 
 **Stores:**
-- `authStore` — Autenticación JWT
-- `siteStore` — Sitio actual
-- `pageStore` — Página actual, locale, layout
-- `editorStore` — Modo del editor (draw/edit)
-- `viewportStore` — Viewport activo (mobile/tablet/desktop)
-- `drawingStore` — Estado del dibujo/move/resize
-- `historyStore` — Undo/redo de cambios
-- `errorsStore` — Notificaciones de error
-- `appNavigationStore` — Navegación de la app
-- `settingsNavigationStore` — Navegación del panel de settings
+- `authStore` — JWT authentication
+- `siteStore` — Current site
+- `pageStore` — Current page, locale, layout
+- `editorStore` — Editor mode (draw/edit)
+- `viewportStore` — Active viewport (mobile/tablet/desktop)
+- `drawingStore` — Drawing/move/resize state
+- `historyStore` — Undo/redo changes
+- `errorsStore` — Error notifications
+- `appNavigationStore` — App navigation
+- `settingsNavigationStore` — Settings panel navigation
 
 **Composables:**
-- `useNewBlock` — Handler de drag para dibujar bloques
-- `useMoveBlock` — Handler de drag para mover bloques
-- `useResizeBlock` — Handler de resize con live grid snapping
-- `useBlockGrid` — Estilo inline del grid para un bloque
-- `useBlockBase` — Estilos base compartidos (fondo, texto, grid)
-- `useGridConversion` — Conversión píxel → grid, colisiones, push-down, trim
-- `useSectionGrid` — Configuración del grid de una sección
-- `useBackgroundStyles` — Estilos de fondo (color, imagen, gradiente)
-- `useBlockLink` — Capa de enlace sobre bloques
-- `useFontSize` — Tipografía responsiva con `calcFluidFont`
-- `useGoogleFonts` — Carga dinámica de Google Fonts
-- `useTipTap` — Instancia del editor TipTap
-- `useTheme` — Sistema de temas dark/light
-- `useApi` — Cliente HTTP con auth
-- `usePagesApi` — Operaciones CRUD de páginas
-- `useValidation` — Validaciones de formularios
-- `useReferenceData` — Nombres de idiomas y países traducidos
+- `useNewBlock` — Drag handler for drawing blocks
+- `useMoveBlock` — Drag handler for moving blocks
+- `useResizeBlock` — Resize handler with live grid snapping
+- `useBlockGrid` — Inline grid style for a block
+- `useBlockBase` — Shared base styles (background, text, grid)
+- `useGridConversion` — Pixel → grid conversion, collisions, push-down, trim
+- `useSectionGrid` — Section grid configuration
+- `useBackgroundStyles` — Background styles (color, image, gradient)
+- `useBlockLink` — Link layer over blocks
+- `useFontSize` — Responsive typography with `calcFluidFont`
+- `useGoogleFonts` — Dynamic Google Fonts loading
+- `useTipTap` — TipTap editor instance
+- `useTheme` — Dark/light theme system
+- `useApi` — HTTP client with auth
+- `usePagesApi` — Page CRUD operations
+- `useValidation` — Form validations
+- `useReferenceData` — Translated language and country names
 
 ### Backend (`echo/`)
 
-| Tecnología | Uso |
-|------------|-----|
-| Go 1.26 | Lenguaje principal |
-| Echo v5 | Framework HTTP |
-| PostgreSQL | Base de datos |
-| pgx/v5 | Driver PostgreSQL |
-| sqlc | Generación de código SQL type-safe |
-| golang-migrate | Migraciones de base de datos |
-| golang-jwt | Autenticación JWT |
-| godotenv | Variables de entorno desde `.env` |
-| webp | Generación de thumbnails WebP |
+| Technology | Usage |
+|------------|-------|
+| Go 1.26 | Main language |
+| Echo v5 | HTTP framework |
+| PostgreSQL | Database |
+| pgx/v5 | PostgreSQL driver |
+| sqlc | Type-safe SQL code generation |
+| golang-migrate | Database migrations |
+| golang-jwt | JWT authentication |
+| godotenv | Environment variables from `.env` |
+| webp | WebP thumbnail generation |
+
+### AI Agent (`langchain/`)
+
+| Technology | Usage |
+|------------|-------|
+| LangChain | Tool definitions and LLM abstraction |
+| LangGraph | StateGraph agent with ReAct loop |
+| DeepSeek | LLM provider (`deepseek-chat`) |
+| Express 5 | SSE streaming server |
+| Zod | Tool schema validation |
 
 ---
 
-## Puesta en marcha
+## Getting Started
 
-### Requisitos
+### Requirements
 
 - Node.js + pnpm
 - Go 1.26+
 - PostgreSQL
-- sqlc (para generar código de queries)
+- sqlc (for generating query code)
+- DeepSeek API key (for AI agent)
 
 ### Backend
 
-El backend se compone de dos servicios independientes que comparten la misma base de datos y directorio de medios:
+The backend consists of two independent services that share the same database and media directory:
 
-| Servicio | Puerto | Descripción |
-|----------|--------|-------------|
-| **Admin** | `SERVER_PORT` (`:8080`) | API REST con JWT, CRUD completo, upload de media |
-| **Render** | `RENDER_PORT` (`:3000`) | Sirve páginas HTML renderizadas y archivos de media |
+| Service | Port | Description |
+|---------|------|-------------|
+| **Admin** | `SERVER_PORT` (`:8080`) | REST API with JWT, full CRUD, media upload |
+| **Render** | `RENDER_PORT` (`:3000`) | Serves rendered HTML pages and media files |
+| **AI Agent** | `:3001` | LangChain agent for site CRUD via natural language |
 
 ```bash
 cd echo
-cp .env.example .env          # Configurar DATABASE_URL, JWT_SECRET, SERVER_PORT, RENDER_PORT, MEDIA_DIR
-make migrate-up               # Ejecutar migraciones
-make sqlc                     # Generar código sqlc (si se modificaron queries)
+cp .env.example .env          # Configure DATABASE_URL, JWT_SECRET, SERVER_PORT, RENDER_PORT, MEDIA_DIR
+make migrate-up               # Run migrations
+make sqlc                     # Generate sqlc code (if queries were modified)
 
-# Ejecutar ambos servicios
+# Run both services
 make run-admin                # Backoffice API (terminal 1)
-make run-render               # Servidor público (terminal 2)
+make run-render               # Public server (terminal 2)
 
-# O ambos a la vez
+# Or both at once
 make run
 ```
 
-**Variables de entorno:**
+**Environment variables:**
 
-| Variable | Servicio | Descripción | Default |
-|----------|----------|-------------|---------|
-| `DATABASE_URL` | Ambos | URL de conexión PostgreSQL | — (requerido) |
-| `JWT_SECRET` | Admin | Secreto para tokens JWT | — (requerido) |
-| `SERVER_PORT` | Admin | Puerto del servidor admin | `:8080` |
-| `RENDER_PORT` | Render | Puerto del servidor render | `:3000` |
-| `MEDIA_DIR` | Ambos | Directorio de archivos subidos | `./uploads` |
-| `ENV` | Ambos | Entorno (`development`/`production`) | `development` |
+| Variable | Service | Description | Default |
+|----------|---------|-------------|---------|
+| `DATABASE_URL` | Both | PostgreSQL connection URL | — (required) |
+| `JWT_SECRET` | Admin | Secret for JWT tokens | — (required) |
+| `SERVER_PORT` | Admin | Admin server port | `:8080` |
+| `RENDER_PORT` | Render | Render server port | `:3000` |
+| `MEDIA_DIR` | Both | Uploaded files directory | `./uploads` |
+| `ENV` | Both | Environment (`development`/`production`) | `development` |
 
 ### Frontend
 
@@ -448,25 +514,34 @@ make run
 cd vuebo
 pnpm install
 pnpm dev                      # Dev server
-pnpm build                    # Build de producción
-pnpm preview                  # Preview del build
+pnpm build                    # Production build
+pnpm preview                  # Build preview
+```
+
+### AI Agent
+
+```bash
+cd langchain
+cp .env.example .env          # Configure DEEPSEEK_API_KEY, API_BASE_URL, API_AUTH_EMAIL, API_AUTH_PASSWORD
+pnpm install
+pnpm dev                      # Agent server on http://localhost:3001
 ```
 
 ---
 
-## Flujo de trabajo
+## Workflow
 
-1. **Registrar/login** → JWT token
-2. **Crear sitio** → Se generan header, footer y página home por defecto
-3. **Abrir editor** → Se carga el layout con secciones y bloques
-4. **Dibujar bloques** → Seleccionar tipo, arrastrar sobre el grid
-5. **Editar contenido** → Texto con TipTap, imágenes, colores, fuentes
-6. **Configurar secciones** → Fondos, espaciado, ocultar por breakpoint
-7. **Publicar** → `PUT /sites/:id/live` renderiza todas las páginas a HTML estático
-8. **Servir** → El endpoint público sirve las páginas renderizadas
+1. **Register/login** → JWT token
+2. **Create site** → Header, footer, and home page are generated by default
+3. **Open editor** → Layout loads with sections and blocks
+4. **Draw blocks** → Select type, drag on the grid
+5. **Edit content** → Text with TipTap, images, colors, fonts
+6. **Configure sections** → Backgrounds, spacing, hide per breakpoint
+7. **Publish** → `PUT /sites/:id/live` renders all pages to static HTML
+8. **Serve** → The public endpoint serves the rendered pages
 
 ---
 
-## Licencia
+## License
 
-MIT. Proyecto demo Guillermo Valentín.
+MIT. Demo project by Guillermo Valentín.
