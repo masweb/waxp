@@ -385,7 +385,7 @@ Las rutas se cargan al abrir un sitio y se inyectan dinámicamente en el router.
 
 ## Stack tecnológico
 
-### Frontend (`vuebo/`)
+### Frontend (`vuebo/`) — [Repositorio](https://github.com/masweb/waxp-vuebo)
 
 | Tecnología | Uso |
 |------------|-----|
@@ -437,7 +437,7 @@ Las rutas se cargan al abrir un sitio y se inyectan dinámicamente en el router.
 - `useValidation` — Validaciones de formularios
 - `useReferenceData` — Nombres de idiomas y países traducidos
 
-### Backend (`echo/`)
+### Backend (`echo/`) — [Repositorio](https://github.com/masweb/waxp-echo)
 
 | Tecnología | Uso |
 |------------|-----|

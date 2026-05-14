@@ -385,7 +385,7 @@ Routes are loaded when opening a site and injected dynamically into the router. 
 
 ## Technology Stack
 
-### Frontend (`vuebo/`)
+### Frontend (`vuebo/`) — [Repository](https://github.com/masweb/waxp-vuebo)
 
 | Technology | Usage |
 |------------|-------|
@@ -437,7 +437,7 @@ Routes are loaded when opening a site and injected dynamically into the router. 
 - `useValidation` — Form validations
 - `useReferenceData` — Translated language and country names
 
-### Backend (`echo/`)
+### Backend (`echo/`) — [Repository](https://github.com/masweb/waxp-echo)
 
 | Technology | Usage |
 |------------|-------|
